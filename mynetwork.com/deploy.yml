@@ -1,4 +1,4 @@
-name: Run Command on Remote Server and Deploy
+name: Deploy to Remote Server
 
 on:
   push:
@@ -10,34 +10,39 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # Step 1: Checkout code
-    - name: Checkout repository
+    # Step 1: Checkout Code from Repository
+    - name: Checkout Repository
       uses: actions/checkout@v2
 
-    # Step 2: Set up SSH
-    - name: Set up SSH
-      uses: webfactory/ssh-agent@v0.5.3
-      with:
-        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+    # Step 2: Install sshpass
+    - name: Install sshpass
+      run: sudo apt-get update && sudo apt-get install -y sshpass
 
-    # Step 3: Clone storage repo
-    - name: Clone Storage Repository
+    # Step 3: Deploy Code to Remote Server
+    - name: Deploy to Server
+      env:
+        SSHPASS: ${{ secrets.SSH_PASSWORD }}
       run: |
-        git clone https://github.com/Amk-001/-0.git /path/to/storage
+        sshpass -e ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_IP }} << 'EOF'
+          # Step 3.1: Navigate to Web Root Directory
+          cd /var/www/html
 
-    # Step 4: Run remote commands
-    - name: Run Remote Command
-      run: |
-        sshpass -p "449530" ssh -o StrictHostKeyChecking=no mynetwork@192.168.1.11 << 'EOF'
-          # SSH into the server and run the necessary commands
-          cd /path/to/your/application  # Navigate to application directory
-          git pull origin main  # Pull latest code
-          # Add any other commands for your website
-          # Restart server or service if necessary
-          sudo systemctl restart apache2  # Example: Restart Apache web server
+          # Step 3.2: Backup Existing Files
+          if [ ! -d backup ]; then
+            mkdir backup
+          fi
+          cp -r . backup/$(date +'%Y%m%d%H%M%S')/
+
+          # Step 3.3: Clone Storage Repository
+          git clone https://github.com/Amk-001/-0.git temp_repo
+          cp -r temp_repo/* .
+          rm -rf temp_repo
+
+          # Step 3.4: Restart Web Server
+          sudo systemctl restart apache2
         EOF
 
-    # Step 5: Test the website deployment (optional)
+    # Step 4: Test Website Deployment
     - name: Test Website Deployment
       run: |
-        curl -I http://192.168.1.11:8080  # Test if the website is running
+        curl -I http://$${{ secrets.SSH_IP }}:8080
